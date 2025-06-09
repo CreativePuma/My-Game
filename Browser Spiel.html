@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<title>Klick-Spiel mit einzigartigen Namen & Reset-Button</title>
+<style>
+  body { font-family: Arial, sans-serif; text-align: center; margin-top: 40px; position: relative; }
+  #button, #startButton, #restartButton, #logoutButton { padding: 20px 40px; font-size: 24px; margin-top: 20px; }
+  #score, #time { font-size: 28px; margin: 10px; }
+  #leaderboard { margin-top: 30px; max-width: 300px; margin-left: auto; margin-right: auto; text-align: left; }
+  #leaderboard h2 { text-align: center; }
+  input, button { font-size: 18px; padding: 8px; }
+  #resetLeaderboardBtn {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    padding: 8px 12px;
+    font-size: 14px;
+    display: none;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<h1>Klick-Spiel</h1>
+
+<button id="resetLeaderboardBtn" title="Leaderboard zurücksetzen">Leaderboard resetten</button>
+
+<div id="loginArea">
+  <label for="playerName">Dein Name:</label>
+  <input type="text" id="playerName" maxlength="15" placeholder="Name eingeben (min. 2 Zeichen)" />
+  <br/>
+  <button id="startButton">Spiel starten</button>
+</div>
+
+<div id="gameArea" style="display:none;">
+  <div>Angemeldet als: <span id="displayName"></span> <button id="logoutButton" style="font-size:16px;">Abmelden</button></div>
+  <div id="score">Punkte: 0</div>
+  <div id="time">Zeit: 10</div>
+  <button id="button" disabled>Klick mich!</button>
+  <button id="restartButton" style="display:none; margin-left:10px;">Neustarten</button>
+</div>
+
+<div id="leaderboard">
+  <h2>Leaderboard</h2>
+  <ol id="scoresList"></ol>
+</div>
+
+<script>
+  const scoreDisplay = document.getElementById('score');
+  const timeDisplay = document.getElementById('time');
+  const button = document.getElementById('button');
+  const startButton = document.getElementById('startButton');
+  const restartButton = document.getElementById('restartButton');
+  const logoutButton = document.getElementById('logoutButton');
+  const playerNameInput = document.getElementById('playerName');
+  const scoresList = document.getElementById('scoresList');
+  const loginArea = document.getElementById('loginArea');
+  const gameArea = document.getElementById('gameArea');
+  const displayName = document.getElementById('displayName');
+  const resetLeaderboardBtn = document.getElementById('resetLeaderboardBtn');
+
+  let score = 0;
+  let time = 10;
+  let timer = null;
+  let gameStarted = false;
+  let currentPlayer = null;
+
+  function loadLeaderboard() {
+    const scores = JSON.parse(localStorage.getItem('klickspielLeaderboard')) || [];
+    scoresList.innerHTML = '';
+    for(let i=0; i<scores.length; i++) {
+      const li = document.createElement('li');
+      li.textContent = `${scores[i].name}: ${scores[i].score} Punkte`;
+      scoresList.appendChild(li);
+    }
+  }
+
+  function saveScore(name, score) {
+    let scores = JSON.parse(localStorage.getItem('klickspielLeaderboard')) || [];
+    const index = scores.findIndex(entry => entry.name === name);
+    if(index >= 0) {
+      if(score > scores[index].score) {
+        scores[index].score = score;
+      }
+    } else {
+      scores.push({name, score});
+    }
+    scores.sort((a,b) => b.score - a.score);
+    if(scores.length > 5) scores.length = 5;
+    localStorage.setItem('klickspielLeaderboard', JSON.stringify(scores));
+  }
+
+  function startGame() {
+    if(!currentPlayer || currentPlayer.length < 2) {
+      alert('Bitte gib einen Namen mit mindestens 2 Zeichen ein!');
+      return;
+    }
+    score = 0;
+    time = 10;
+    gameStarted = true;
+    scoreDisplay.textContent = 'Punkte: 0';
+    timeDisplay.textContent = 'Zeit: 10';
+    button.disabled = false;
+    startButton.disabled = true;
+    restartButton.style.display = 'none';
+
+    timer = setInterval(() => {
+      if(time > 0) {
+        time--;
+        timeDisplay.textContent = 'Zeit: ' + time;
+      } else {
+        endGame();
+      }
+    }, 1000);
+  }
+
+  function endGame() {
+    clearInterval(timer);
+    gameStarted = false;
+    button.disabled = true;
+    restartButton.style.display = 'inline-block';
+    startButton.disabled = false;
+
+    const prevScore = parseInt(localStorage.getItem('currentPlayerBestScore'), 10) || 0;
+    if(score > prevScore) {
+      localStorage.setItem('currentPlayerBestScore', score);
+      saveScore(currentPlayer, score);
+      alert(`Zeit vorbei! ${currentPlayer}, neuer Highscore: ${score} Punkte!`);
+    } else {
+      alert(`Zeit vorbei! ${currentPlayer}, dein Score: ${score} Punkte. Bester Score: ${prevScore} Punkte.`);
+    }
+
+    loadLeaderboard();
+  }
+
+  function login(name) {
+    currentPlayer = name;
+    localStorage.setItem('currentPlayer', name);
+    const bestScore = parseInt(localStorage.getItem('currentPlayerBestScore'), 10) || 0;
+    localStorage.setItem('currentPlayerBestScore', bestScore);
+    displayName.textContent = name;
+    loginArea.style.display = 'none';
+    gameArea.style.display = 'block';
+    button.disabled = true;
+    scoreDisplay.textContent = 'Punkte: 0';
+    timeDisplay.textContent = 'Zeit: 10';
+    loadLeaderboard();
+
+    // Reset-Button nur zeigen, wenn Name "CreativePuma"
+    if(name === 'CreativePuma') {
+      resetLeaderboardBtn.style.display = 'inline-block';
+    } else {
+      resetLeaderboardBtn.style.display = 'none';
+    }
+  }
+
+  function logout() {
+    currentPlayer = null;
+    localStorage.removeItem('currentPlayer');
+    localStorage.removeItem('currentPlayerBestScore');
+    loginArea.style.display = 'block';
+    gameArea.style.display = 'none';
+    playerNameInput.value = '';
+    button.disabled = true;
+    restartButton.style.display = 'none';
+    resetLeaderboardBtn.style.display = 'none';
+  }
+
+  resetLeaderboardBtn.addEventListener('click', () => {
+    if(confirm('Willst du wirklich das gesamte Leaderboard zurücksetzen?')) {
+      localStorage.removeItem('klickspielLeaderboard');
+      loadLeaderboard();
+      alert('Leaderboard wurde zurückgesetzt!');
+    }
+  });
+
+  startButton.addEventListener('click', () => {
+    const name = playerNameInput.value.trim();
+    if(name.length < 2) {
+      alert('Bitte gib einen Namen mit mindestens 2 Zeichen ein!');
+      return;
+    }
+    login(name);
+    startGame();
+  });
+
+  button.addEventListener('click', () => {
+    if(gameStarted && time > 0) {
+      score++;
+      scoreDisplay.textContent = 'Punkte: ' + score;
+    }
+  });
+
+  restartButton.addEventListener('click', () => {
+    score = 0;
+    time = 10;
+    gameStarted = false;
+    scoreDisplay.textContent = 'Punkte: 0';
+    timeDisplay.textContent = 'Zeit: 10';
+    button.disabled = true;
+    restartButton.style.display = 'none';
+    startButton.disabled = false;
+    startGame();
+  });
+
+  logoutButton.addEventListener('click', () => {
+    logout();
+  });
+
+  window.addEventListener('load', () => {
+    const savedPlayer = localStorage.getItem('currentPlayer');
+    const savedBestScore = parseInt(localStorage.getItem('currentPlayerBestScore'), 10) || 0;
+    if(savedPlayer && savedPlayer.length >= 2) {
+      login(savedPlayer);
+      scoreDisplay.textContent = 'Punkte: 0';
+      timeDisplay.textContent = 'Zeit: 10';
+      button.disabled = true;
+      restartButton.style.display = 'none';
+    } else {
+      loginArea.style.display = 'block';
+      gameArea.style.display = 'none';
+    }
+    loadLeaderboard();
+  });
+
+  loadLeaderboard();
+</script>
+
+</body>
+</html>
