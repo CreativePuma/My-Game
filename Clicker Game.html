@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Klick-Spiel mit Shop</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 40px;
+      position: relative;
+      background-color: #fdfdfd;
+    }
+
+    #startButton, #logoutButton, #resetLeaderboardBtn {
+      padding: 15px 30px;
+      font-size: 20px;
+      margin-top: 20px;
+    }
+
+    #score, #time {
+      font-size: 28px;
+      margin: 10px;
+    }
+
+    #leaderboard {
+      margin-top: 30px;
+      max-width: 300px;
+      margin-left: auto;
+      margin-right: auto;
+      text-align: left;
+    }
+
+    #leaderboard h2 {
+      text-align: center;
+    }
+
+    input {
+      font-size: 18px;
+      padding: 8px;
+    }
+
+    #resetLeaderboardBtn {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      font-size: 14px;
+      display: none;
+    }
+
+    #coinArea {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: #eee;
+      padding: 10px 15px;
+      border-radius: 12px;
+      box-shadow: 0 0 4px rgba(0,0,0,0.2);
+      font-size: 20px;
+      text-align: left;
+    }
+
+    #shop {
+      margin-top: 10px;
+    }
+
+    .shop-item {
+      margin-top: 5px;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 8px;
+    }
+
+    .shop-item button {
+      margin-left: 10px;
+    }
+
+    .selected {
+      font-weight: bold;
+      color: green;
+    }
+  </style>
+</head>
+<body>
+
+<div id="coinArea">
+  <div id="coinCounter">💰 Münzen: 0</div>
+  <button onclick="toggleShop()">🛒 Shop öffnen</button>
+  <div id="shop" style="display: none;"></div>
+</div>
+
+<button id="resetLeaderboardBtn">Leaderboard resetten</button>
+
+<h1>Klick-Spiel</h1>
+
+<div id="loginArea">
+  <label for="playerName">Dein Name:</label>
+  <input type="text" id="playerName" maxlength="15" placeholder="Name eingeben (min. 2 Zeichen)" />
+  <br/>
+  <button id="startButton">Spiel starten</button>
+</div>
+
+<div id="gameArea" style="display:none;">
+  <div>Angemeldet als: <span id="displayName"></span> <button id="logoutButton" style="font-size:16px;">Abmelden</button></div>
+  <div id="score">Punkte: 0</div>
+  <div id="time">Zeit: 10</div>
+  <button id="startButton">Spiel starten</button>
+</div>
+
+<div id="leaderboard">
+  <h2>Leaderboard</h2>
+  <ol id="scoresList"></ol>
+</div>
+
+<script>
+  const scoreDisplay = document.getElementById('score');
+  const timeDisplay = document.getElementById('time');
+  const startButtons = document.querySelectorAll('#startButton');
+  const startButton = startButtons[startButtons.length - 1];
+  const playerNameInput = document.getElementById('playerName');
+  const scoresList = document.getElementById('scoresList');
+  const loginArea = document.getElementById('loginArea');
+  const gameArea = document.getElementById('gameArea');
+  const displayName = document.getElementById('displayName');
+  const logoutButton = document.getElementById('logoutButton');
+  const resetLeaderboardBtn = document.getElementById('resetLeaderboardBtn');
+  const coinCounter = document.getElementById('coinCounter');
+  const shopDiv = document.getElementById('shop');
+
+  let score = 0;
+  let time = 10;
+  let timer = null;
+  let gameStarted = false;
+  let currentPlayer = null;
+  let coins = 0;
+  let cursorColor = 'white';
+
+  const cursors = {
+    white: 'white',
+    red: 'red',
+    blue: 'blue',
+    green: 'green',
+    yellow: 'yellow',
+    black: 'black'
+  };
+
+  function setCursor(color) {
+    const svgCursor = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" height="32" width="32"><circle cx="16" cy="16" r="6" fill="${color}"/></svg>') 16 16, auto`;
+    document.body.style.cursor = svgCursor;
+  }
+
+  function loadCursor() {
+    cursorColor = localStorage.getItem('selectedCursor') || 'white';
+    setCursor(cursorColor);
+  }
+
+  function loadCoins() {
+    coins = parseInt(localStorage.getItem('playerCoins') || '0', 10);
+    updateCoinDisplay();
+  }
+
+  function updateCoinDisplay() {
+    coinCounter.textContent = `💰 Münzen: ${coins}`;
+  }
+
+  function addCoin() {
+    coins++;
+    localStorage.setItem('playerCoins', coins);
+    updateCoinDisplay();
+  }
+
+  function loadLeaderboard() {
+    const scores = JSON.parse(localStorage.getItem('klickspielLeaderboard')) || [];
+    scoresList.innerHTML = '';
+    for (let i = 0; i < scores.length; i++) {
+      const li = document.createElement('li');
+      li.textContent = `${scores[i].name}: ${scores[i].score} Punkte`;
+      scoresList.appendChild(li);
+    }
+  }
+
+  function saveScore(name, score) {
+    let scores = JSON.parse(localStorage.getItem('klickspielLeaderboard')) || [];
+    const index = scores.findIndex(entry => entry.name === name);
+    if (index >= 0) {
+      if (score > scores[index].score) {
+        scores[index].score = score;
+      }
+    } else {
+      scores.push({ name, score });
+    }
+    scores.sort((a, b) => b.score - a.score);
+    if (scores.length > 5) scores.length = 5;
+    localStorage.setItem('klickspielLeaderboard', JSON.stringify(scores));
+  }
+
+  function startGame() {
+    score = 0;
+    time = 10;
+    gameStarted = true;
+    scoreDisplay.textContent = 'Punkte: 0';
+    timeDisplay.textContent = 'Zeit: 10';
+    startButton.textContent = 'Klick mich!';
+
+    timer = setInterval(() => {
+      if (time > 0) {
+        time--;
+        timeDisplay.textContent = 'Zeit: ' + time;
+      } else {
+        endGame();
+      }
+    }, 1000);
+  }
+
+  function endGame() {
+    clearInterval(timer);
+    gameStarted = false;
+    startButton.textContent = 'Spiel starten';
+
+    const prevScore = parseInt(localStorage.getItem('currentPlayerBestScore'), 10) || 0;
+    if (score > prevScore) {
+      localStorage.setItem('currentPlayerBestScore', score);
+      saveScore(currentPlayer, score);
+      alert(`Zeit vorbei! ${currentPlayer}, neuer Highscore: ${score} Punkte!`);
+    } else {
+      alert(`Zeit vorbei! ${currentPlayer}, dein Score: ${score} Punkte. Bester Score: ${prevScore} Punkte.`);
+    }
+
+    loadLeaderboard();
+  }
+
+  function login(name) {
+    currentPlayer = name;
+    localStorage.setItem('currentPlayer', name);
+    localStorage.setItem('currentPlayerBestScore', localStorage.getItem('currentPlayerBestScore') || 0);
+    displayName.textContent = name;
+    loginArea.style.display = 'none';
+    gameArea.style.display = 'block';
+    scoreDisplay.textContent = 'Punkte: 0';
+    timeDisplay.textContent = 'Zeit: 10';
+    startButton.textContent = 'Spiel starten';
+
+    if (name === 'CreativePuma') {
+      resetLeaderboardBtn.style.display = 'inline-block';
+    } else {
+      resetLeaderboardBtn.style.display = 'none';
+    }
+
+    loadLeaderboard();
+    loadCoins();
+    loadCursor();
+    renderShop();
+  }
+
+  function logout() {
+    currentPlayer = null;
+    localStorage.removeItem('currentPlayer');
+    localStorage.removeItem('currentPlayerBestScore');
+    loginArea.style.display = 'block';
+    gameArea.style.display = 'none';
+    playerNameInput.value = '';
+    resetLeaderboardBtn.style.display = 'none';
+  }
+
+  function toggleShop() {
+    shopDiv.style.display = shopDiv.style.display === 'none' ? 'block' : 'none';
+  }
+
+  function renderShop() {
+    const unlocked = JSON.parse(localStorage.getItem('unlockedCursors') || '["white"]');
+    shopDiv.innerHTML = '';
+
+    Object.keys(cursors).forEach(color => {
+      const item = document.createElement('div');
+      item.className = 'shop-item';
+      const owned = unlocked.includes(color);
+      const selected = cursorColor === color;
+
+      item.innerHTML = `🎯 Zeiger: ${color}${owned ? (selected ? ' <span class="selected">(aktiv)</span>' : ` <button onclick="selectCursor('${color}')">Auswählen</button>`) : ` <button onclick="buyCursor('${color}')">Kaufen (10 Münzen)</button>`}`;
+      shopDiv.appendChild(item);
+    });
+  }
+
+  function buyCursor(color) {
+    if (coins >= 10) {
+      coins -= 10;
+      localStorage.setItem('playerCoins', coins);
+      updateCoinDisplay();
+
+      let unlocked = JSON.parse(localStorage.getItem('unlockedCursors') || '["white"]');
+      unlocked.push(color);
+      localStorage.setItem('unlockedCursors', JSON.stringify(unlocked));
+
+      selectCursor(color);
+    } else {
+      alert("Nicht genug Münzen!");
+    }
+  }
+
+  function selectCursor(color) {
+    cursorColor = color;
+    localStorage.setItem('selectedCursor', color);
+    setCursor(color);
+    renderShop();
+  }
+
+  resetLeaderboardBtn.addEventListener('click', () => {
+    if (confirm('Willst du wirklich das gesamte Leaderboard zurücksetzen?')) {
+      localStorage.removeItem('klickspielLeaderboard');
+      loadLeaderboard();
+      alert('Leaderboard wurde zurückgesetzt!');
+    }
+  });
+
+  startButton.addEventListener('click', () => {
+    if (!gameStarted) {
+      const nameInput = playerNameInput.value.trim();
+      const name = currentPlayer || nameInput;
+
+      if (name.length < 2) {
+        alert('Bitte gib einen Namen mit mindestens 2 Zeichen ein!');
+        return;
+      }
+
+      if (!currentPlayer) {
+        login(name);
+      }
+
+      startGame();
+    } else {
+      score++;
+      addCoin();
+      scoreDisplay.textContent = 'Punkte: ' + score;
+    }
+  });
+
+  logoutButton.addEventListener('click', logout);
+
+  window.addEventListener('load', () => {
+    const savedPlayer = localStorage.getItem('currentPlayer');
+    if (savedPlayer && savedPlayer.length >= 2) {
+      login(savedPlayer);
+    } else {
+      loadCursor();
+    }
+  });
+</script>
+
+</body>
+</html>
